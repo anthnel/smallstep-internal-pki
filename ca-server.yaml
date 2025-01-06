@@ -1,0 +1,37 @@
+#!/usr/bin/env ansible-playbook
+---
+- name: Install and configure PKI
+  hosts: ca-server
+  become: true
+  # gather_facts: false
+
+  vars_files:
+    - secrets.yml
+
+  vars:
+    step_cli_version: 0.24.4
+
+  tasks:
+    - name: Initialize Certification Authority
+      ansible.builtin.include_role:
+        name: maxhoesel.smallstep.step_ca
+      vars:
+        step_ca_name: Test Internal CA
+
+    - name: Create an ACME provisioner with newly generated keys
+      maxhoesel.smallstep.step_ca_provisioner:
+        name: acme
+        type: ACME
+        ca_url: "https://{{ inventory_hostname }}"
+        ca_config: /etc/step-ca/config/ca.json
+        root: /etc/step-ca/certs/root_ca.crt
+
+    - name: Add inventory_hostname in /etc/hosts
+      delegate_to: localhost
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        search_string: "{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}"
+        line: "{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} {{ inventory_hostname }}"
+        owner: root
+        group: root
+        mode: "0644"

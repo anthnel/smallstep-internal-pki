@@ -1,0 +1,8 @@
+---
+roles:
+  - name: nginxinc.nginx
+
+collections:
+  - name: maxhoesel.smallstep
+
+  - name: git+https://github.com/kmpm/ansible-collection-incus.git

@@ -1,0 +1,35 @@
+#!/usr/bin/env ansible-playbook
+---
+- name: Test nginx ssl configuration
+  hosts: client
+  # gather_facts: false
+
+  vars:
+    ca_server_fp: 798307f3b0afa2fec639a5ef3b5037f029d8ce64a6c2168f3f605966354e6cd5
+    ca_server_fqdn: ca-server
+    step_cli_version: 0.24.4
+    remote_host: reverse-proxy
+
+  tasks:
+    - name: Install packages
+      ansible.builtin.package:
+        name:
+          - curl
+        state: present
+
+    - name: Bootstrap PKI client host
+      ansible.builtin.include_role:
+        name: maxhoesel.smallstep.step_bootstrap_host
+      vars:
+        step_bootstrap_ca_url: "https://{{ ca_server_fqdn }}"
+        step_bootstrap_fingerprint: "{{ ca_server_fp }}"
+
+    - name: "Test it! https://{{ remote_host }}/index.html"
+      uri:
+        url: "https://{{ remote_host }}/index.html"
+        validate_certs: true
+        return_content: true
+      register: this
+      failed_when: "'Running on' not in this.content"
+      tags:
+        - test

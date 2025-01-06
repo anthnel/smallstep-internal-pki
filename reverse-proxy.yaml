@@ -1,0 +1,72 @@
+#!/usr/bin/env ansible-playbook
+---
+- name: Install and configure reverse-proxy
+  hosts: reverse-proxy
+  # gather_facts: false
+
+  vars_files:
+    - secrets.yml
+
+  vars:
+    ca_server_fp: 798307f3b0afa2fec639a5ef3b5037f029d8ce64a6c2168f3f605966354e6cd5
+    ca_server_fqdn: ca-server
+    step_cli_version: 0.24.4
+    conf_file: /etc/nginx/conf.d/defauft.conf
+
+  handlers:
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+
+  tasks:
+    - name: Install NGINX
+      ansible.builtin.include_role:
+        name: nginxinc.nginx
+      vars:
+        nginx_branch: stable
+
+    - name: Install packages
+      ansible.builtin.package:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+
+    - name: Bootstrap PKI client host
+      ansible.builtin.include_role:
+        name: maxhoesel.smallstep.step_bootstrap_host
+      vars:
+        step_bootstrap_ca_url: "https://{{ ca_server_fqdn }}"
+        step_bootstrap_fingerprint: "{{ ca_server_fp }}"
+
+    - name: Manage nginx config template
+      template:
+        src: nginx.conf.j2
+        dest: "{{ conf_file }}"
+        mode: "0644"
+      notify: Restart nginx
+
+    - name: Install home page
+      template:
+        src: index.html.j2
+        dest: /usr/share/nginx/html/index.html
+        mode: "0644"
+
+    - name: Restart nginx
+      meta: flush_handlers
+
+    - name: Generate certificate with certbot
+      become: true
+      ansible.builtin.command: "certbot --nginx -d {{ inventory_hostname }} --server https://{{ ca_server_fqdn }}/acme/acme/directory --email anthoni.devops@example.com"
+
+    - name: Add inventory_hostname in /etc/hosts
+      become: true
+      delegate_to: localhost
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        search_string: "{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}"
+        line: "{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }} {{ inventory_hostname }}"
+        owner: root
+        group: root
+        mode: "0644"
